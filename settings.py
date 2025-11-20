@@ -154,6 +154,7 @@ class Settings:
 
         cursor.execute(f"UPDATE info SET word_length={self.length} WHERE id=0")
         cursor.execute(f"UPDATE info SET high_score={self.high_score_value} WHERE id=0")
+        cursor.execute("UPDATE info SET solve_method=? WHERE id=0", (self.SOLVE_METHODS[self.solve_index],))
 
         connection.commit()
         connection.close()

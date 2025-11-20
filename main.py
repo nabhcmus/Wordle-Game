@@ -398,29 +398,49 @@ class Wordle:
         if not os.path.exists("settings.db"):
             connection = sqlite3.connect("settings.db")
             cursor = connection.cursor()
-            cursor.execute("CREATE TABLE info(id integer, word_length integer,high_score integer)")
-            cursor.execute('INSERT INTO info VALUES(?,?,?)', (0, 5, 0))
 
+            # Tạo DB mới với solve_method
+            cursor.execute(
+                "CREATE TABLE info(id integer, word_length integer, high_score integer, solve_method text)"
+            )
+            cursor.execute(
+                "INSERT INTO info VALUES(?,?,?,?)",
+                (0, 5, 0, "BFS")    # default solve = BFS
+            )
+
+            self.word_size = 5
+            self.high_score = 0
+            self.solve_method = "BFS"
             self.word_api = words_api.Words(self.word_size)
 
             connection.commit()
-            cursor.execute("SELECT * FROM info")
             connection.close()
+
         else:
             connection = sqlite3.connect("settings.db")
             cursor = connection.cursor()
 
-            cursor.execute("SELECT * FROM info")
+            # Kiểm tra xem solve_method có tồn tại không
+            cursor.execute("PRAGMA table_info(info)")
+            columns = [col[1] for col in cursor.fetchall()]   # Lấy danh sách tên cột
 
+            if "solve_method" not in columns:
+                # Thêm cột solve_method nếu chưa có
+                cursor.execute("ALTER TABLE info ADD COLUMN solve_method TEXT DEFAULT 'BFS'")
+                connection.commit()
+
+            # Đọc lại dữ liệu
+            cursor.execute("SELECT * FROM info")
             data = cursor.fetchall()
+
             self.word_size = data[0][1]
             self.high_score = data[0][2]
-
-            # print("high = ",self.high_score)
+            self.solve_method = data[0][3]      # Giờ luôn tồn tại
 
             self.word_api = words_api.Words(self.word_size)
 
-            connection.close()
+            connection.close()  
+
     def solve(self):
         print("Running solver method:", self.solve_method)
 
@@ -433,7 +453,8 @@ class Wordle:
         elif self.solve_method == "A*":
             self.solve_astar()
         else:
-            print("Unknown solve method!")
+            print("Unknown solve method:", self.solve_method)
+
 
     def update_high_score(self):
         connection = sqlite3.connect("settings.db")

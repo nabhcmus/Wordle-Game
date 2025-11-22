@@ -5,7 +5,10 @@ import words_api
 import settings as st
 import os
 import sqlite3
+import time
+from tkinter import messagebox
 from astar import AStarSolver
+from dfs import DFSSolver
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 from openpyxl import Workbook, load_workbook
 import os
@@ -19,7 +22,7 @@ class Wordle:
         self.root = tk.Tk()
 
         self.width = 600
-        self.height = 800
+        self.height = 1000
         self.x_co = int(self.root.winfo_screenwidth() / 2) - int(self.width / 2)
         self.y_co = 50
 
@@ -37,7 +40,7 @@ class Wordle:
         self.high_score = 0
         self.word_api = None
         self.get_from_db()
-
+        self.solver_has_run = False
         self.setting = Image.open('images/setting.png')
         self.setting = self.setting.resize((40, 40), Image.Resampling.LANCZOS)
         self.setting = ImageTk.PhotoImage(self.setting)
@@ -146,7 +149,19 @@ class Wordle:
             cursor="hand2",
             command=self.solve  # gọi phương thức solve() trong Wordle
         )
-        self.solve_button.pack()
+        self.solve_button.pack(side="left", padx=10)
+        self.new_game_button = tk.Button(
+            solve_frame,
+            text="New Game",
+            font="cambria 18 bold",
+            fg="#14f41f",
+            bg="#202020",
+            padx=20,
+            pady=5,
+            cursor="hand2",
+            command=self.start_new_game
+        )
+        self.new_game_button.pack(side="right", padx=10)
         self.status_bar = tk.Label(self.root, text=f"Score : {self.score}",font="cambria 10 bold",
                                    anchor="w",padx=10,background="#242424",fg="white")
         self.status_bar.pack(fill='x', side="bottom")
@@ -220,6 +235,14 @@ class Wordle:
                 self.guess += key_press['text']
                 self.current_b += 1
     
+    def clear_current_row(self):
+        for button in self.buttons[self.current_B_row]:
+            button["text"] = ""
+            button["bg"] = self.BG
+        
+        self.guess = ""
+        self.current_b = 0
+    
     def erase_character(self):
         if self.current_b > 0:
             self.current_b -= 1
@@ -231,7 +254,12 @@ class Wordle:
     def check_for_match(self):
         print("guess = ", self.guess)
         if len(self.guess) == self.word_size:
+            if not self.word_api.is_in_dictionary(self.guess):
+                messagebox.showwarning("Invalid Word", f"'{self.guess}' is not in our word list. Please try another word.")
+                self.clear_current_row()
+                return 
             self.guess_count += 1
+            self.solver_has_run = False
 
             if self.word_api.is_valid_guess(self.guess):
                 for button in self.buttons[self.current_B_row]:
@@ -303,7 +331,17 @@ class Wordle:
             self.current_B_row += 1
             self.guess = ""
 
+    def start_new_game(self):
+        print("Starting a new game...")
+        self.word_api.select_word()
+        # print(f"New secret word is: {self.word_api.word}")
+        self.reset(keypad=True)
+        for row_buttons in self.buttons:
+            for button in row_buttons:
+                button.config(text="", bg=self.BG)
+
     def reset(self, popup=None, keypad=None):
+        self.solver_has_run = False
         if not keypad:
             for buttons_list in self.buttons:
                 for button in buttons_list:
@@ -443,8 +481,12 @@ class Wordle:
             connection.close()  
 
     def solve(self):
+        if self.solver_has_run:
+            for r in range(self.current_B_row, 6):
+                for c in range(self.word_size):
+                    self.buttons[r][c].config(text="", bg=self.BG)
+            self.root.update()
         print("Running solver method:", self.solve_method)
-
         if self.solve_method == "BFS":
             self.solve_bfs()
         elif self.solve_method == "DFS":
@@ -455,6 +497,8 @@ class Wordle:
             self.solve_astar()
         else:
             print("Unknown solve method:", self.solve_method)
+            return
+        self.solver_has_run = True
 
 
     def update_high_score(self):
@@ -479,8 +523,6 @@ class Wordle:
         widget = e.widget
         widget["image"] = self.setting
     def solve_astar(self):
-        
-
         solver = AStarSolver(self.word_api)
         solution = solver.solve()
         
@@ -520,9 +562,54 @@ class Wordle:
     
         self.root.update()
         
+    def solve_dfs(self):
+        # --- 1. Tạo trạng thái bàn cờ từ giao diện ---
+        board_state = []
+        for r in range(self.current_B_row):
+            guess = "".join([self.buttons[r][c]["text"] for c in range(self.word_size)])
             
+            feedback = []
+            for c in range(self.word_size):
+                color = self.buttons[r][c]["bg"]
+                if color == "green":
+                    feedback.append('G')
+                elif color == "#d0d925": # Yellow
+                    feedback.append('Y')
+                else: # Gray or default
+                    feedback.append('X')
+            
+            # Chỉ thêm vào nếu hàng đó đã được đoán (có chữ)
+            if guess:
+                board_state.append((guess, feedback))
 
-
+        # --- 2. Khởi tạo và gọi solver ---
+        solver = DFSSolver(self.word_api)
+        solution = solver.solve(board_state)
+        
+        print("DFS Solution Path:", solution)
+        # Có thể thêm phần hiển thị thống kê tương tự A*
+        
+        # --- 3. Hiển thị kết quả lên giao diện ---
+        start_row = self.current_B_row
+        secret_word = self.word_api.word
+        
+        for i, word in enumerate(solution):
+            current_row = start_row + i
+            if current_row > 5: break # Không hiển thị quá 6 hàng
+            
+            feedback = solver._calculate_feedback(word, secret_word)
+            
+            for c in range(self.word_size):
+                self.buttons[current_row][c]["text"] = word[c]
+                if feedback[c] == 'G':
+                    self.buttons[current_row][c].config(bg="green")
+                elif feedback[c] == 'Y':
+                    self.buttons[current_row][c].config(bg="#d0d925")
+                else:
+                    self.buttons[current_row][c].config(bg="#4d4a4a")
+            self.root.update()
+            time.sleep(0.5) # Thêm độ trễ để dễ quan sát
+    
 def on_hover(e, color):
     button = e.widget
     button["bg"] = color

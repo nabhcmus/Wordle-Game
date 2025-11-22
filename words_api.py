@@ -49,5 +49,8 @@ class Words:
 
         self.used_words.append(self.word)
 
+    def is_in_dictionary(self, word):
+        return word in self.words_list
+
     def display_right_word(self):
         print("Right word was : ", self.word)

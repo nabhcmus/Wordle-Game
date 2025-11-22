@@ -92,7 +92,11 @@ class Settings:
         tk.Label(solve_frame, text="Solve Method", background=self.BG,
                  font="cambria 15 bold", fg="#14f41f").grid(row=0, column=0, padx=12)
 
-        self.solve_index = 0  # default BFS
+        current_method = self.functions.solve_method
+        try:
+            self.solve_index = self.SOLVE_METHODS.index(current_method)
+        except ValueError:
+            self.solve_index = 0
 
         # Left arrow
         btn = tk.Button(solve_frame, image=decrease,

@@ -7,7 +7,8 @@ import os
 import sqlite3
 from astar import AStarSolver
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
-
+from openpyxl import Workbook, load_workbook
+import os
 
 class Wordle:
     FIRST_RIGHT = 10
@@ -482,25 +483,25 @@ class Wordle:
 
         solver = AStarSolver(self.word_api)
         solution = solver.solve()
+        
 
         print("A* Solution:", solution)
-
-        # reset GUI
-        self.reset()
-
-        # tự động điền từng bước giải
+        stats = solver.get_stats()
+        print("*A* Statistics ")
+        for k, v in stats.items():
+            print(f"{k}: {v}")
+        solver.save_to_excel(stats)
+        
+        goal_word = self.word_api.word
+    
         for step, word in enumerate(solution):
-            if step >= 6:
+            if step >= 5:  # chỉ điền 5 bước, bước 6 dành cho goal
                 break
-
-            # ghi chữ lên dòng step
+        
             for i in range(self.word_size):
                 self.buttons[step][i]["text"] = word[i]
 
-            # tạo pattern
-            fb = solver.feedback(word, self.word_api.word)
-
-            # tô màu
+            fb = solver.feedback(word, goal_word)
             for i, f in enumerate(fb):
                 if f == "G":
                     self.buttons[step][i].config(bg="green")
@@ -508,9 +509,18 @@ class Wordle:
                     self.buttons[step][i].config(bg="#d0d925")
                 else:
                     self.buttons[step][i].config(bg="#4d4a4a")
-
+        
             self.root.update()
-            self.root.after(500)  # delay cho từng bước đẹp hơn
+
+    # Bước cuối: hiển thị goal word
+        final_step = min(len(solution), 5)  # row cuối cho goal
+        for i, char in enumerate(goal_word):
+            self.buttons[final_step][i]["text"] = char
+            self.buttons[final_step][i].config(bg="green")
+    
+        self.root.update()
+        
+            
 
 
 def on_hover(e, color):
